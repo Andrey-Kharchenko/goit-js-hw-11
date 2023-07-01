@@ -5,18 +5,30 @@ import 'simplelightbox/dist/simple-lightbox.min.css';
 
 const searchForm = document.getElementById('search-form');
 const gallery = document.querySelector('.gallery');
+const API_KEY = '37975010-22e06f5b9850d0937ed6c375a';
 
+// Переменные состояния
 let currentPage = 1;
 let currentSearchQuery = '';
 let lightbox;
+let isLoading = false;
 
-searchForm.addEventListener('submit', async (e) => {
+// Обработчик события отправки формы
+searchForm.addEventListener('submit', handleSubmit);
+
+async function handleSubmit(e) {
   e.preventDefault();
 
-  const searchQuery = searchForm.elements.searchQuery.value;
+  const searchQuery = searchForm.elements.searchQuery.value.trim();
 
-  if (searchQuery.trim() === '') {
+  if (searchQuery === '') {
+    showError('Please enter a search query.');
     return;
+  }
+
+  // Функция для отображения ошибки
+  function showError(message) {
+    Notiflix.Notify.failure(message);
   }
 
   if (searchQuery !== currentSearchQuery) {
@@ -26,15 +38,23 @@ searchForm.addEventListener('submit', async (e) => {
 
   currentSearchQuery = searchQuery;
 
+  await fetchData(searchQuery);
+}
+
+// Функция для загрузки данных с помощью API
+async function fetchData(searchQuery) {
+  if (isLoading) return;
+  isLoading = true;
+
   try {
     const response = await axios.get('https://pixabay.com/api/', {
       params: {
-        key: '37975010-22e06f5b9850d0937ed6c375a',
+        key: API_KEY,
         q: searchQuery,
         image_type: 'photo',
         orientation: 'horizontal',
         safesearch: true,
-        per_page: 40,
+        per_page: 20,
         page: currentPage
       }
     });
@@ -47,10 +67,8 @@ searchForm.addEventListener('submit', async (e) => {
       return;
     }
 
-    images.forEach((image) => {
-      const photoCard = createPhotoCard(image);
-      gallery.appendChild(photoCard);
-    });
+    const markup = createMarkup(images);
+    gallery.insertAdjacentHTML('beforeend', markup);
 
     if (currentPage === 1) {
       Notiflix.Notify.success(`Hooray! We found ${totalHits} images.`);
@@ -71,60 +89,35 @@ searchForm.addEventListener('submit', async (e) => {
   } catch (error) {
     Notiflix.Notify.failure('An error occurred while fetching the images. Please try again later.');
     console.error(error);
+  } finally {
+    isLoading = false;
   }
-});
-
-function createPhotoCard(image) {
-  const { webformatURL, largeImageURL, tags, likes, views, comments, downloads } = image;
-
-  const photoCard = document.createElement('div');
-  photoCard.classList.add('photo-card');
-
-  const link = document.createElement('a');
-  link.href = largeImageURL;
-
-  const img = document.createElement('img');
-  img.src = webformatURL;
-  img.alt = tags;
-  img.loading = 'lazy';
-
-  const info = document.createElement('div');
-  info.classList.add('info');
-
-  const likesInfo = createInfoItem('Likes', likes);
-  const viewsInfo = createInfoItem('Views', views);
-  const commentsInfo = createInfoItem('Comments', comments);
-  const downloadsInfo = createInfoItem('Downloads', downloads);
-
-  info.appendChild(likesInfo);
-  info.appendChild(viewsInfo);
-  info.appendChild(commentsInfo);
-  info.appendChild(downloadsInfo);
-
-  link.appendChild(img);
-  photoCard.appendChild(link);
-  photoCard.appendChild(info);
-
-  return photoCard;
 }
 
-function createInfoItem(label, value) {
-  const p = document.createElement('p');
-  p.classList.add('info-item');
-  p.innerHTML = `<b>${label}:</b> ${value}`;
-
-  return p;
+// Функция для создания разметки галереи изображений
+function createMarkup(images) {
+  return images.map(({ webformatURL, largeImageURL, tags, likes, views, comments, downloads }) => `
+    <li class="gallery__item">
+      <a class="gallery__link" href="${largeImageURL}">
+        <img class="gallery__image" src="${webformatURL}" alt="${tags}" title="${tags}" />
+        <div class="info">
+          <h2>Likes: <span>${likes}</span></h2>
+          <h2>Views: <span>${views}</span></h2>
+          <h2>Downloads: <span>${downloads}</span></h2>
+          <h2>Comments: <span>${comments}</span></h2>
+        </div>
+      </a>
+    </li>
+  `).join('');
 }
 
+// Функция для прокрутки к следующей группе изображений
 function scrollToNextGroup() {
-  const { height: cardHeight } = document.querySelector('.gallery').firstElementChild.getBoundingClientRect();
-
-  window.scrollBy({
-    top: cardHeight * 2,
-    behavior: 'smooth'
-  });
+  const cardHeight = gallery.firstElementChild.getBoundingClientRect().height;
+  window.scrollBy({ top: cardHeight * 2, behavior: 'smooth' });
 }
 
+// Обработчик события прокрутки страницы
 window.addEventListener('scroll', () => {
   const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
 
